@@ -2648,9 +2648,9 @@ document.addEventListener('click', e => {
     case 'nudge': { const t = QUOTES.find(x => x.id === id); const i = stageInfo(t); log(t, `Nudge sent to ${userName(t.owner)} and ${state.roles[i.st.escalate].label} (email + WhatsApp)`); toast(`Nudge sent for ${qref(t)} to ${userName(t.owner).split(' ')[0]}.`, 'green'); break; }
     case 'advance': { if (!q) break; const next = q.stage + 1; if (!S().stages[next]) break; if (S().stages[next].id === 'order' && !ORDERS.some(o => o.q === q.id)) { poOpen(q); break; } advanceTo(q, next); break; }
     case 'approve': { if (!q || !can('approveMargin')) break; q.marginApproved = {by:state.userId, at:iso(TODAY)}; log(q, 'Below-floor margin approved'); q.audit.push({at:iso(TODAY), who:state.userId, line:0, field:'approval', from:'pending', to:'approved', reason:'below-floor margin accepted'}); toast('Margins approved. The quote can now be sent.', 'green'); render(); break; }
-    case 'lost': { if (!q || !needPerm('editQuote', 'close a quotation')) break; openModal(`<h3>Mark ${q.id} as lost</h3><div class="field"><label>Reason</label><textarea class="pin" id="lostWhy" placeholder="Lost on price, customer deferred, competitor…"></textarea></div><div class="btnrow"><button class="btn danger" data-act="lostConfirm">Mark lost</button><button class="btn" data-act="closeModal">Cancel</button></div>`); break; }
+    case 'lost': { if (!q || !needPerm('editQuote', 'close a quotation')) break; openModal(`<h3>Mark ${qref(q)} as lost</h3><div class="field"><label>Reason</label><textarea class="pin" id="lostWhy" placeholder="Lost on price, customer deferred, competitor…"></textarea></div><div class="btnrow"><button class="btn danger" data-act="lostConfirm">Mark lost</button><button class="btn" data-act="closeModal">Cancel</button></div>`); break; }
     case 'lostConfirm': { if (!q) break; q.outcome = 'lost'; q.lostAt = iso(TODAY); q.lostWhy = document.getElementById('lostWhy').value || 'No reason given'; log(q, 'Marked lost: ' + q.lostWhy); closeModal(); toast(`${qref(q)} marked lost.`, 'red'); render(); break; }
-    case 'addNote': openModal(`<h3>Add a note to ${q.id}</h3><div class="field"><label>Note</label><textarea class="pin" id="noteText" placeholder="Spoke to…"></textarea></div><div class="btnrow"><button class="btn primary" data-act="noteConfirm">Save note</button><button class="btn" data-act="closeModal">Cancel</button></div>`); break;
+    case 'addNote': openModal(`<h3>Add a note to ${qref(q)}</h3><div class="field"><label>Note</label><textarea class="pin" id="noteText" placeholder="Spoke to…"></textarea></div><div class="btnrow"><button class="btn primary" data-act="noteConfirm">Save note</button><button class="btn" data-act="closeModal">Cancel</button></div>`); break;
     case 'noteConfirm': { const t = document.getElementById('noteText').value.trim(); if (t) { log(q, t); toast('Note added.', 'green'); } closeModal(); render(); break; }
     case 'addLine': q.lines.push({d:'New item', q:1, u:'nos', v:'v1', c:null, t:'pct', m:S().floor + 4}); log(q, 'Line added'); render(); break;
     case 'delLine': { if (q.lines.length < 2) { fail('A quotation needs at least one line', 'Edit this line instead of removing it.'); break; }
@@ -3113,7 +3113,7 @@ function integrationTiles(){
 
 /* ===================== OUTLOOK ===================== */
 function mailBody(q){
-  return `Dear ${q.attn.n.replace(/^(Mr|Ms|Mrs|Dr)\.?\s+/, '')},\n\n`
+  return `Dear ${q.attn.n.trim() || 'Sir'},\n\n`
     + `Please find attached our ${PTYPE(q.ptype).name.toLowerCase()} proposal ${qref(q)} for ${q.subject}.\n\n`
     + `The offer is valid for ${q.terms.validity} and the basic amount excluding taxes is ${inrD(quoteCalc(q).sell)}. `
     + `Delivery: ${q.terms.delivery}\n\nWe look forward to your valuable purchase order.\n\n`
@@ -3134,7 +3134,7 @@ function mailOpen(){
     ${warn}
     <div class="mrow"><span class="k">To</span><input class="pin" id="mTo" value="${esc(q.attn.e)}"></div>
     <div class="mrow"><span class="k">Cc</span><input class="pin" id="mCc" value="${esc(CO.email)}"></div>
-    <div class="mrow"><span class="k">Subject</span><input class="pin" id="mSub" value="${esc(PTYPE(q.ptype).name)} Proposal ${esc(qref(q))} – ${esc(q.subject)}"></div>
+    <div class="mrow"><span class="k">Subject</span><input class="pin" id="mSub" value="${esc(PTYPE(q.ptype).name)} Proposal ${esc(qref(q))}: ${esc(q.subject)}"></div>
     <textarea class="pin mbody" id="mBody">${esc(mailBody(q))}</textarea>
     <div class="attach">${ico('file')} ${esc(qref(q))}.pdf <span class="muted">· ${(18 + q.lines.length * 2)} KB</span></div>
     <div id="mErr"></div>
