@@ -2645,11 +2645,11 @@ document.addEventListener('click', e => {
     case 'statusfilter': state.filters.status = state.filters.status === el.dataset.status ? 'all' : el.dataset.status; render(); break;
     case 'clearFiltersOld': break;
     case 'tbl': document.getElementById('tbl-' + id).classList.toggle('show'); break;
-    case 'nudge': { const t = QUOTES.find(x => x.id === id); const i = stageInfo(t); log(t, `Nudge sent to ${userName(t.owner)} and ${state.roles[i.st.escalate].label} (email + WhatsApp)`); toast(`Nudge sent for ${t.id} to ${userName(t.owner).split(' ')[0]}.`, 'green'); break; }
+    case 'nudge': { const t = QUOTES.find(x => x.id === id); const i = stageInfo(t); log(t, `Nudge sent to ${userName(t.owner)} and ${state.roles[i.st.escalate].label} (email + WhatsApp)`); toast(`Nudge sent for ${qref(t)} to ${userName(t.owner).split(' ')[0]}.`, 'green'); break; }
     case 'advance': { if (!q) break; const next = q.stage + 1; if (!S().stages[next]) break; if (S().stages[next].id === 'order' && !ORDERS.some(o => o.q === q.id)) { poOpen(q); break; } advanceTo(q, next); break; }
     case 'approve': { if (!q || !can('approveMargin')) break; q.marginApproved = {by:state.userId, at:iso(TODAY)}; log(q, 'Below-floor margin approved'); q.audit.push({at:iso(TODAY), who:state.userId, line:0, field:'approval', from:'pending', to:'approved', reason:'below-floor margin accepted'}); toast('Margins approved. The quote can now be sent.', 'green'); render(); break; }
     case 'lost': { if (!q || !needPerm('editQuote', 'close a quotation')) break; openModal(`<h3>Mark ${q.id} as lost</h3><div class="field"><label>Reason</label><textarea class="pin" id="lostWhy" placeholder="Lost on price, customer deferred, competitor…"></textarea></div><div class="btnrow"><button class="btn danger" data-act="lostConfirm">Mark lost</button><button class="btn" data-act="closeModal">Cancel</button></div>`); break; }
-    case 'lostConfirm': { if (!q) break; q.outcome = 'lost'; q.lostAt = iso(TODAY); q.lostWhy = document.getElementById('lostWhy').value || 'No reason given'; log(q, 'Marked lost: ' + q.lostWhy); closeModal(); toast(`${q.id} marked lost.`, 'red'); render(); break; }
+    case 'lostConfirm': { if (!q) break; q.outcome = 'lost'; q.lostAt = iso(TODAY); q.lostWhy = document.getElementById('lostWhy').value || 'No reason given'; log(q, 'Marked lost: ' + q.lostWhy); closeModal(); toast(`${qref(q)} marked lost.`, 'red'); render(); break; }
     case 'addNote': openModal(`<h3>Add a note to ${q.id}</h3><div class="field"><label>Note</label><textarea class="pin" id="noteText" placeholder="Spoke to…"></textarea></div><div class="btnrow"><button class="btn primary" data-act="noteConfirm">Save note</button><button class="btn" data-act="closeModal">Cancel</button></div>`); break;
     case 'noteConfirm': { const t = document.getElementById('noteText').value.trim(); if (t) { log(q, t); toast('Note added.', 'green'); } closeModal(); render(); break; }
     case 'addLine': q.lines.push({d:'New item', q:1, u:'nos', v:'v1', c:null, t:'pct', m:S().floor + 4}); log(q, 'Line added'); render(); break;
@@ -2673,6 +2673,9 @@ document.addEventListener('click', e => {
 });
 document.addEventListener('change', e => {
   const t = e.target;
+  if (t.dataset && t.dataset.wiz === 'cust' && state.wiz.open) {   /* a different customer brings its own address and contact */
+    wizCollect(); const c = cust(state.wiz.d.cust), k = c.contacts[0] || {n:'', r:'', e:'', p:''};
+    state.wiz.d.toAddr = c.addr; state.wiz.d.attn = {n:k.n, r:k.r, e:k.e, p:k.p}; state.wiz.err = {}; wizRender(); return; }
   if (t.id === 'userSel') { state.userId = t.value; state.quoteId = null; if (state.tab === 'reports' && !can('viewReports')) state.tab = 'dashboard'; render(); toast(`Prototype: now viewing as ${me().name} (${roleOf(me()).label}).`); return; }
   if (t.dataset.filter) { state.filters[t.dataset.filter] = t.value; render(); return; }
   if (t.id === 'periodSel') { state.period = Number(t.value); render(); return; }
@@ -2680,6 +2683,13 @@ document.addEventListener('change', e => {
   if (t.dataset.stage) { const s = S().stages[Number(t.dataset.stage)], k = t.dataset.k; s[k] = (k === 'target' || k === 'followUp') ? Math.max(0, Number(t.value) || 0) : t.value; toast(`${s.name}: ${k === 'target' ? 'target' : k === 'followUp' ? 'follow-up' : k} updated. Dashboard recalculated.`); render(); return; }
   if (t.dataset.policy) { const k = t.dataset.policy; S()[k] = k === 'basis' ? t.value : Number(t.value); toast('Margin policy updated; every quotation recalculated.'); render(); return; }
   if (t.dataset.user) { state.users.find(u => u.id === t.dataset.user).role = t.value; toast('Role changed.'); render(); return; }
+});
+document.addEventListener('input', e => {
+  const f = e.target.dataset && (e.target.dataset.nr || e.target.dataset.po);
+  if (!f) return;
+  const box = e.target.closest('.field'); if (box) { box.classList.remove('bad'); const er = box.querySelector('.err'); if (er) er.remove(); }
+  if (e.target.dataset.nr && state.newRec) delete state.newRec.err[f];
+  if (e.target.dataset.po && state.po) delete state.po.err[f];
 });
 document.addEventListener('input', e => {
   if (e.target.id === 'custSearch') { state.custSearch = e.target.value; const pos = e.target.selectionStart; render(); const el = document.getElementById('custSearch'); el.focus(); el.setSelectionRange(pos, pos); }
@@ -3428,8 +3438,12 @@ function render(){
   const page = document.getElementById('page');
   const v = {dashboard:viewDashboard, quotations:viewQuotations, customers:viewCustomers, vendors:viewVendors, reports:viewReports, settings:viewSettings}[state.tab]
     || viewDashboard;
+  const key = state.tab + '|' + state.quoteId + '|' + state.doorTab;
+  const kept = [...page.querySelectorAll('.cb-door, .cb-list')].map(el => [el.classList.contains('cb-door') ? '.cb-door' : '.cb-list', el.scrollTop]);
   try {
     page.innerHTML = v() + footer();
+    if (render._key === key) kept.forEach(([sel, top]) => { const el = page.querySelector(sel); if (el) el.scrollTop = top; });
+    render._key = key;
   } catch (err) {
     page.innerHTML = `<div class="bento"><div class="b s12">${errBox('This screen could not be drawn', String(err && err.message || err))}
       <div class="btnrow" style="margin-bottom:0"><button class="btn" data-act="tab" data-tab="dashboard">Back to the dashboard</button></div></div></div>`;
@@ -3603,7 +3617,7 @@ function advanceTo(q, next, note){
   if (next === S().stages.length - 1) q.outcome = 'won';
   log(q, `Moved to ${S().stages[next].name}`);
   const sync = syncOrder(q);
-  okT(`${q.id} moved to ${S().stages[next].name}`, note || sync);
+  okT(`${qref(q)} moved to ${S().stages[next].name}`, note || sync);
   state.folderTab = 'journey'; render();
 }
 
