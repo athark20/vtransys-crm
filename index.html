@@ -1611,6 +1611,13 @@ body{font-size:14px}
 #page .toprow .head h2{font-size:27px; letter-spacing:-.03em}
 #page .toprow .head .lead{margin-top:5px; font-size:15.5px; color:var(--text-2); max-width:72ch}
 @media (max-width:640px){ #page .toprow .head h2{font-size:22px} #page .toprow .head .lead{font-size:14px} }
+
+/* new vendor, new customer, purchase order */
+.nr-h{font-size:11px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--text-2); margin:14px 0 4px; padding-top:12px; border-top:1px solid var(--line)}
+.unrated{font-size:11.5px; color:var(--text-3); letter-spacing:0}
+.newacct{display:flex; flex-direction:column; justify-content:center}
+.newacct .na-badge{width:38px; height:38px; border-radius:12px; display:grid; place-items:center; background:var(--blue-soft, #e8f0fb); color:var(--blue, #2f6fbf); margin:8px 0 10px}
+.newacct .na-badge svg{width:18px; height:18px}
 </style>
 </head>
 <body>
@@ -2639,7 +2646,7 @@ document.addEventListener('click', e => {
     case 'clearFiltersOld': break;
     case 'tbl': document.getElementById('tbl-' + id).classList.toggle('show'); break;
     case 'nudge': { const t = QUOTES.find(x => x.id === id); const i = stageInfo(t); log(t, `Nudge sent to ${userName(t.owner)} and ${state.roles[i.st.escalate].label} (email + WhatsApp)`); toast(`Nudge sent for ${t.id} to ${userName(t.owner).split(' ')[0]}.`, 'green'); break; }
-    case 'advance': { if (!q) break; const next = q.stage + 1; q.history.push({stage:next, at:iso(TODAY)}); q.stage = next; if (next === S().stages.length - 1) q.outcome = 'won'; log(q, `Moved to ${S().stages[next].name}`); toast(`${q.id} moved to ${S().stages[next].name}.`, 'green'); state.folderTab = 'journey'; render(); break; }
+    case 'advance': { if (!q) break; const next = q.stage + 1; if (!S().stages[next]) break; if (S().stages[next].id === 'order' && !ORDERS.some(o => o.q === q.id)) { poOpen(q); break; } advanceTo(q, next); break; }
     case 'approve': { if (!q || !can('approveMargin')) break; q.marginApproved = {by:state.userId, at:iso(TODAY)}; log(q, 'Below-floor margin approved'); q.audit.push({at:iso(TODAY), who:state.userId, line:0, field:'approval', from:'pending', to:'approved', reason:'below-floor margin accepted'}); toast('Margins approved. The quote can now be sent.', 'green'); render(); break; }
     case 'lost': { if (!q || !needPerm('editQuote', 'close a quotation')) break; openModal(`<h3>Mark ${q.id} as lost</h3><div class="field"><label>Reason</label><textarea class="pin" id="lostWhy" placeholder="Lost on price, customer deferred, competitor…"></textarea></div><div class="btnrow"><button class="btn danger" data-act="lostConfirm">Mark lost</button><button class="btn" data-act="closeModal">Cancel</button></div>`); break; }
     case 'lostConfirm': { if (!q) break; q.outcome = 'lost'; q.lostAt = iso(TODAY); q.lostWhy = document.getElementById('lostWhy').value || 'No reason given'; log(q, 'Marked lost: ' + q.lostWhy); closeModal(); toast(`${q.id} marked lost.`, 'red'); render(); break; }
@@ -2985,22 +2992,22 @@ function viewCustomers(){
       <div class="meta">${x.st.recv} order${x.st.recv === 1 ? '' : 's'} received · ${x.st.del.length} delivered</div>
       <div class="foot"><span class="chip">${x.co.length} open</span>${x.val ? `<span class="chip">${lakh(x.val)}</span>` : ''}
         ${x.st.amc.filter(a => a.a.state !== 'in').length ? `<span class="stamp amber">${x.st.amc.filter(a => a.a.state !== 'in').length} AMC</span>` : ''}
-        ${x.stuck ? `<span class="stamp red">${x.stuck} stuck</span>` : ''}</div></div>`).join('');
+        ${x.stuck ? `<span class="stamp red">${x.stuck} stuck</span>` : ''}${x.c.added ? '<span class="stamp blue">New</span>' : ''}</div></div>`).join('');
 
   let rec = '';
   const c = CUSTOMERS.find(x => x.id === state.openCust);
   if (c) {
-    const x = rows.find(r => r.c.id === c.id), s = x.st, stat = CUST_STATS.find(k => k.c === c.id), wr = Math.round(stat.nW / stat.nQ * 100);
+    const x = rows.find(r => r.c.id === c.id), s = x.st, stat = CUST_STATS.find(k => k.c === c.id), wr = stat ? Math.round(stat.nW / stat.nQ * 100) : 0;
     rec = `<div class="seclabel" id="recLabel"><b>${esc(c.name)}</b><span class="sub">customer record</span><span class="spacer"></span><button class="btn sm" data-act="openCust" data-id="${c.id}">Close</button></div>
     <div class="bento">
       <div class="b s4 t6"><div class="eyebrow">Customer details</div><div class="hc-top"><div class="av lg" style="background:${c.color}">${esc(initials(c.name))}</div>
           <div><div class="cust-n">${esc(c.name)}</div><div class="meta">${esc(c.industry)} · since ${c.since}</div></div></div>
-        <dl class="kv" style="margin-top:10px"><dt>Address</dt><dd>${esc(c.addr).replace(/\n/g, '<br>')}</dd><dt>GST</dt><dd class="num">${esc(c.gst)}</dd><dt>Terms</dt><dd>${esc(c.terms)}</dd></dl></div>
+        <dl class="kv" style="margin-top:10px"><dt>Address</dt><dd>${esc(c.addr).replace(/\n/g, '<br>')}</dd><dt>GSTIN</dt><dd class="num">${c.gst ? esc(c.gst) : '<span class="muted">Not on file</span>'}</dd><dt>Terms</dt><dd>${esc(c.terms)}</dd></dl></div>
       <div class="b s2 t6 tile sm"><div class="ico">${ico('file')}</div><div class="lbl">Orders received</div><div class="val">${s.recv}</div><div class="foot">${lakh(s.rv)} lifetime</div></div>
       <div class="b s2 t6 tile sm good"><div class="ico">${ico('truck')}</div><div class="lbl">Delivered</div><div class="val">${s.del.length}</div><div class="foot">${lakh(s.dv)} · ${s.pend.length} in progress</div></div>
-      <div class="b s4 t6"><div class="eyebrow">Relationship, 12 months</div><div class="hc-row">${gaugeSVG(wr, 100, 'Win rate', '#178f64')}
+      ${!stat ? `<div class="b s4 t6 newacct"><div class="eyebrow">Relationship</div><div class="na-badge">${ico('plus')}</div><div class="hc-big">New customer</div><div class="meta">Added ${fmtD(c.added || iso(TODAY))} by ${esc(firstName(c.by))}</div></div>` : `<div class="b s4 t6"><div class="eyebrow">Relationship, 12 months</div><div class="hc-row">${gaugeSVG(wr, 100, 'Win rate', '#178f64')}
           <div><div class="hc-big">${lakh(stat.won)} won</div><div class="meta">of ${lakh(stat.quoted)} quoted</div></div></div>
-        <div class="hc-stats"><div><span>Quotes</span><b>${stat.nQ}</b></div><div><span>Orders</span><b>${stat.nW}</b></div><div><span>Cycle</span><b>${stat.avgDays}d</b></div><div><span>Margin</span><b>${can('viewMargin') ? pct(stat.gm) : '<span class="locked">hidden</span>'}</b></div></div></div>
+        <div class="hc-stats"><div><span>Quotes</span><b>${stat.nQ}</b></div><div><span>Orders</span><b>${stat.nW}</b></div><div><span>Cycle</span><b>${stat.avgDays}d</b></div><div><span>Margin</span><b>${can('viewMargin') ? pct(stat.gm) : '<span class="locked">hidden</span>'}</b></div></div></div>`}
       <div class="b s5 t12"><h3>Contacts</h3><div class="plist">${c.contacts.map(k => `<div class="prow"><div class="avatar sm">${esc(initials(stripHon(k.n)))}</div>
           <div class="p-n"><b>${esc(k.n)}</b><span>${esc(k.r)} · ${esc(k.e)}</span><span class="num">${esc(k.p)}</span></div></div>`).join('')}</div></div>
       <div class="b s7 t12"><h3>AMC targets</h3>
@@ -3015,25 +3022,26 @@ function viewCustomers(){
     </div>`;
   }
   return pageHead({title:'Customers', 
-      right: can('manageCustomers') ? `<button class="btn primary" data-act="soon">${ico('plus')} New customer</button>` : ''})
+      right: can('manageCustomers') ? `<button class="btn primary" data-act="newCustomer">${ico('plus')} New customer</button>` : ''})
     + `<div class="bento">${hero}${amcTile}${cards}</div>${rec}`;
 }
 
 /* ===================== VENDORS ===================== */
 function viewVendors(){
-  const stars = r => '★'.repeat(Math.floor(r)) + (r % 1 ? '½' : '') + '<span style="opacity:.3">' + '★'.repeat(5 - Math.ceil(r)) + '</span>';
+  const stars = r => r == null ? '<span class="unrated">Not rated yet</span>' : '★'.repeat(Math.floor(r)) + (r % 1 ? '½' : '') + '<span style="opacity:.3">' + '★'.repeat(5 - Math.ceil(r)) + '</span>';
   const vis = visibleQuotes();
   const rows = VENDORS.map(v => { const vq = vis.filter(q => q.lines.some(l => l.v === v.id)), vo = vq.filter(q => q.outcome === 'open');
     const pend = vo.flatMap(q => q.lines.filter(l => l.v === v.id && l.c == null).map(l => ({q, l})));
     const spend = vq.flatMap(q => q.lines.filter(l => l.v === v.id && l.c != null).map(l => l.c * l.q)).reduce((a, b) => a + b, 0);
     return {v, vq, vo, pend, spend}; });
-  const avgOT = Math.round(VENDORS.reduce((a, v) => a + v.ontime, 0) / VENDORS.length);
+  const rated = VENDORS.filter(v => v.ontime != null), fresh = VENDORS.length - rated.length;
+  const avgOT = Math.round(rated.reduce((a, v) => a + v.ontime, 0) / Math.max(1, rated.length));
   const otc = p => p < 85 ? 'var(--red)' : p < 92 ? 'var(--amber)' : 'var(--green)';
   const chase = rows.filter(x => x.pend.length);
 
   const hero = `<div class="b s5 hero-card"><div class="eyebrow">On time delivery, 12 months</div>
-    <div class="hc-val"><span class="val">${avgOT}%</span><span class="hc-sub">across ${VENDORS.length} vendors</span></div>
-    <div class="sbars">${rows.slice().sort((a, b) => b.v.ontime - a.v.ontime).map(x => `<div class="sbar" data-act="openVendor" data-id="${x.v.id}"><span>${esc(x.v.name)}</span><div class="sbar-t"><i style="width:${x.v.ontime}%;background:${otc(x.v.ontime)}"></i></div><b class="num">${x.v.ontime}%</b></div>`).join('')}</div></div>`;
+    <div class="hc-val"><span class="val">${avgOT}%</span><span class="hc-sub">across ${rated.length} vendors${fresh ? `, ${fresh} new` : ''}</span></div>
+    <div class="sbars">${rows.slice().sort((a, b) => (b.v.ontime == null ? -1 : b.v.ontime) - (a.v.ontime == null ? -1 : a.v.ontime)).map(x => `<div class="sbar" data-act="openVendor" data-id="${x.v.id}"><span>${esc(x.v.name)}</span>${x.v.ontime == null ? '<div class="sbar-t"></div><b class="num muted">New</b>' : `<div class="sbar-t"><i style="width:${x.v.ontime}%;background:${otc(x.v.ontime)}"></i></div><b class="num">${x.v.ontime}%</b>`}</div>`).join('')}</div></div>`;
   const chaseTile = `<div class="b s7 chase"><h3>Costs to chase <span class="sub">Open lines with no price</span></h3>
     ${chase.length ? `<div class="plist">${chase.map(x => `<div class="prow click" data-act="openQuote" data-id="${x.pend[0].q.id}"><div class="av sm" style="background:#5b6577">${esc(initials(x.v.name))}</div>
         <div class="p-n"><b>${esc(x.v.name)}</b><span>${x.pend.length} line${x.pend.length > 1 ? 's' : ''} · ${[...new Set(x.pend.map(p => qref(p.q)))].join(', ')}</span></div>
@@ -3042,7 +3050,7 @@ function viewVendors(){
       <div class="av">${esc(initials(x.v.name))}</div><h4>${esc(x.v.name)}</h4>
       <div class="meta">${esc(x.v.loc)} · lead ${x.v.lead} days · terms ${esc(x.v.terms)}</div>
       <div class="prods" style="margin-top:7px">${x.v.products.slice(0, 3).map(p => `<span class="prod">${esc(p)}</span>`).join('')}${x.v.products.length > 3 ? `<span class="prod">+${x.v.products.length - 3}</span>` : ''}</div>
-      <div class="foot"><span class="stars">${stars(x.v.rating)}</span><span class="chip">${x.vo.length} open</span>${x.pend.length ? `<span class="stamp amber">${x.pend.length} cost due</span>` : ''}</div></div>`).join('');
+      <div class="foot"><span class="stars">${stars(x.v.rating)}</span>${x.v.added ? '<span class="stamp blue">New</span>' : ''}<span class="chip">${x.vo.length} open</span>${x.pend.length ? `<span class="stamp amber">${x.pend.length} cost due</span>` : ''}</div></div>`).join('');
 
   let rec = '';
   const v = VENDORS.find(z => z.id === state.openVendor);
@@ -3053,11 +3061,11 @@ function viewVendors(){
     <div class="bento">
       <div class="b s5 t12"><div class="eyebrow">Vendor details</div><div class="hc-top"><div class="av lg" style="background:#5b6577">${esc(initials(v.name))}</div>
           <div><div class="cust-n">${esc(v.name)}</div><div class="meta">${esc(v.cat)} · ${esc(v.loc)} · <span class="stars">${stars(v.rating)}</span></div></div></div>
-        <div class="prow" style="margin-top:10px"><div class="avatar sm">${esc(initials(stripHon(cn)))}</div><div class="p-n"><b>${esc(cn)}</b><span class="num">${esc(cp || '')}</span></div></div>
+        <div class="prow" style="margin-top:10px"><div class="avatar sm">${esc(initials(stripHon(cn)))}</div><div class="p-n"><b>${esc(cn)}</b><span class="num">${esc(cp || '')}</span>${v.email ? `<span>${esc(v.email)}</span>` : ''}</div></div>
         ${can('manageVendors') ? '<div class="btnrow" style="margin-bottom:0"><button class="btn sm" data-act="soon">Edit vendor</button><button class="btn sm" data-act="soon">Send RFQ</button></div>' : ''}</div>
       <div class="b s7 t12"><h3>What they supply <span class="sub">${v.products.length} product lines</span></h3>
         <div class="prods">${v.products.map(p => `<span class="prod">${esc(p)}</span>`).join('')}</div>
-        <div class="hc-stats" style="margin-top:12px"><div><span>On time</span><b style="color:${otc(v.ontime)}">${v.ontime}%</b></div><div><span>Lead time</span><b>${v.lead} days</b></div>
+        <div class="hc-stats" style="margin-top:12px">${v.ontime == null ? '<div><span>On time</span><b>New</b></div>' : `<div><span>On time</span><b style="color:${otc(v.ontime)}">${v.ontime}%</b></div>`}<div><span>Lead time</span><b>${v.lead} days</b></div>
           <div><span>Terms</span><b>${esc(v.terms)}</b></div><div><span>Open quotes</span><b>${x.vo.length}</b></div></div>
         ${showCost ? `<div class="hint" style="margin-top:9px">Cost placed with this vendor: <b class="num">${inr(x.spend)}</b></div>` : ''}</div>
       <div class="b s12"><h3>Quotations using this vendor <span class="sub">${x.vq.length} visible to you</span></h3>
@@ -3068,7 +3076,7 @@ function viewVendors(){
     </div>`;
   }
   return pageHead({title:'Vendors', 
-      right: can('manageVendors') ? `<button class="btn primary" data-act="soon">${ico('plus')} New vendor</button>` : ''})
+      right: can('manageVendors') ? `<button class="btn primary" data-act="newVendor">${ico('plus')} New vendor</button>` : ''})
     + `<div class="bento">${hero}${chaseTile}${cards}</div>${rec}`;
 }
 
@@ -3317,6 +3325,12 @@ document.addEventListener('click', e => {
     case 'goStage': state.filters = {stage:el.dataset.stage, cust:'all', owner:'all', status:'all', ptype:'all', q:''};
       state.quoteId = null; go('quotations'); break;
     case 'goCust': state.openCust = el.dataset.id; go('customers'); showRecord(); break;
+    /* ---- new vendor, new customer, purchase order ---- */
+    case 'newVendor': if (!needPerm('manageVendors', 'add vendors')) break; recOpen('vendor'); break;
+    case 'newCustomer': if (!needPerm('manageCustomers', 'add customers')) break; recOpen('customer'); break;
+    case 'newVendorSave': if (!needPerm('manageVendors', 'add vendors')) break; vendorSave(); break;
+    case 'newCustomerSave': if (!needPerm('manageCustomers', 'add customers')) break; customerSave(); break;
+    case 'poSave': poSave(); break;
     case 'sfilter': state.filters.stage = v; render(); break;
     case 'clearFilters': state.filters = {stage:'all', cust:'all', owner:'all', status:'all', ptype:'all', q:''}; render(); break;
     case 'doorTab': state.doorTab = v; render(); break;
@@ -3436,7 +3450,164 @@ function centreLiveStage(){
 
 
 /* prototype debug hook, lets support inspect live state from the console */
-window.VTCRM = {state, QUOTES, CUSTOMERS, VENDORS, ORDERS, render, visibleQuotes, quoteCalc, qref, amcAll};
+/* ===================== NEW VENDOR, NEW CUSTOMER, PURCHASE ORDERS ===================== */
+const TERMS_OPTS = ['Advance', '15 days', '30 days', '45 days', '60 days', '90 days'];
+const VEND_CATS = ['Consumables', 'Electrical', 'Fabrication', 'Instrumentation', 'Mechanical', 'Packaging', 'Safety', 'Services'];
+const CUST_COLORS = ['#0f7f6f', '#7a3fa0', '#c2413b', '#1f6f9f', '#8a6d12', '#4a5ea8', '#2f7d4f', '#a3477a'];
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+const normName = t => String(t || '').toLowerCase().replace(/&/g, 'and').replace(/\b(ltd|limited|pvt|private|llp|inc)\b/g, '').replace(/[^a-z0-9]+/g, '');
+const firstName = uid => { const u = USERS.find(x => x.id === uid); return u ? u.name.split(' ')[0] : 'you'; };
+const clearFails = () => document.querySelectorAll('#toast .slip.red').forEach(t => t.remove());
+const nextId = (list, p) => p + (Math.max(0, ...list.map(x => parseInt(String(x.id).slice(1), 10) || 0)) + 1);
+
+function recOpen(kind){
+  const inds = [...new Set(CUSTOMERS.map(c => c.industry).concat(['Auto components', 'Chemicals and pharma', 'Power and utilities', 'Process plants', 'Other']))];
+  state.newRec = {kind, err:{}, inds, d: kind === 'vendor'
+    ? {name:'', cat:VEND_CATS[0], loc:'', lead:'', products:'', cn:'', cp:'', ce:'', terms:'30 days'}
+    : {name:'', site:'', industry:inds[0], terms:'45 days', addr:'', gst:'', cn:'', cr:'', ce:'', cp:''}};
+  recRender();
+  setTimeout(() => { const f = document.querySelector('#modal [data-nr="name"]'); if (f && f.focus) f.focus(); }, 30);
+}
+function recRead(){ document.querySelectorAll('#modal [data-nr]').forEach(el => { state.newRec.d[el.dataset.nr] = el.value; }); }
+function recRender(){
+  const r = state.newRec, d = r.d, er = r.err;
+  const E = k => er[k] ? `<span class="err">${esc(er[k])}</span>` : '';
+  const bad = k => er[k] ? 'bad' : '';
+  const I = (k, label, attrs) => `<div class="field ${bad(k)}"><label for="nr-${k}">${label}</label><input class="pin" id="nr-${k}" data-nr="${k}" value="${esc(d[k] == null ? '' : d[k])}" autocomplete="off" ${attrs || ''}>${E(k)}</div>`;
+  const Sel = (k, label, list) => `<div class="field"><label for="nr-${k}">${label}</label><select class="pin" id="nr-${k}" data-nr="${k}">${list.map(o => `<option ${o === d[k] ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></div>`;
+  const T = (k, label, attrs) => `<div class="field ${bad(k)}"><label for="nr-${k}">${label}</label><textarea class="pin" id="nr-${k}" data-nr="${k}" ${attrs || ''}>${esc(d[k] || '')}</textarea>${E(k)}</div>`;
+  const foot = (act, label) => `<div class="btnrow" style="margin-bottom:0"><button class="btn primary" data-act="${act}">${ico('plus')} ${label}</button><button class="btn" data-act="closeModal">Cancel</button></div>`;
+  const html = r.kind === 'vendor'
+    ? `<h3>New vendor</h3>
+      <div class="g2">${I('name', 'Vendor name', 'placeholder="Shree Samarth Engineering"')}${Sel('cat', 'Category', VEND_CATS)}</div>
+      <div class="g2">${I('loc', 'Location', 'placeholder="Bhosari MIDC, Pune"')}${I('lead', 'Lead time, days', 'inputmode="numeric" placeholder="7"')}</div>
+      ${I('products', 'What they supply, separated by commas', 'placeholder="Pressure gauges, ball valves, pipe fittings"')}
+      <h4 class="nr-h">Contact</h4>
+      <div class="g2">${I('cn', 'Name', 'placeholder="Mr. Kulkarni"')}${I('cp', 'Mobile', 'inputmode="tel" placeholder="+91 98xxx xxxxx"')}</div>
+      <div class="g2">${I('ce', 'Email for RFQs', 'inputmode="email" placeholder="sales@vendor.in"')}${Sel('terms', 'Payment terms', TERMS_OPTS)}</div>
+      ${foot('newVendorSave', 'Add vendor')}`
+    : `<h3>New customer</h3>
+      <div class="g2">${I('name', 'Company', 'placeholder="Sahyadri Auto Components"')}${I('site', 'Plant or site', 'placeholder="Talegaon MIDC, Pune"')}</div>
+      <div class="g2">${Sel('industry', 'Industry', r.inds)}${Sel('terms', 'Payment terms', TERMS_OPTS)}</div>
+      ${T('addr', 'Billing address, as it prints on quotations', 'placeholder="Company name\nStreet and area,\nCity PIN." style="min-height:74px"')}
+      ${I('gst', 'GSTIN', 'placeholder="27ABCDE1234F1Z5" maxlength="15" style="text-transform:uppercase"')}
+      <h4 class="nr-h">First contact</h4>
+      <div class="g2">${I('cn', 'Name', 'placeholder="Mr. Joshi"')}${I('cr', 'Designation', 'placeholder="Purchase Manager"')}</div>
+      <div class="g2">${I('ce', 'Email', 'inputmode="email" placeholder="name@company.in"')}${I('cp', 'Mobile', 'inputmode="tel" placeholder="+91 98xxx xxxxx"')}</div>
+      ${foot('newCustomerSave', 'Add customer')}`;
+  openModal(html);
+}
+function recFail(){
+  recRender();
+  const k = Object.keys(state.newRec.err)[0], f = k && document.querySelector(`#modal [data-nr="${k}"]`);
+  if (f && f.focus) f.focus();
+  fail('Check the highlighted fields', Object.keys(state.newRec.err).length + ' field' + (Object.keys(state.newRec.err).length > 1 ? 's need' : ' needs') + ' attention.');
+}
+function vendorSave(){
+  recRead();
+  const d = state.newRec.d, er = {};
+  const t = k => String(d[k] || '').trim();
+  er.name = V.req(t('name'), 'Vendor name');
+  const dup = !er.name && VENDORS.find(v => normName(v.name) === normName(t('name')));
+  if (dup) er.name = `${dup.name} is already in the vendor list`;
+  er.loc = V.req(t('loc'), 'Location');
+  er.lead = V.req(t('lead'), 'Lead time') || V.num(t('lead'), 'Lead time', 1, 90);
+  const prods = t('products').split(',').map(x => x.trim()).filter(Boolean);
+  if (!prods.length) er.products = 'Add at least one item they supply';
+  er.cn = V.req(t('cn'), 'Contact name');
+  er.cp = V.req(t('cp'), 'Mobile') || V.phone(t('cp'));
+  if (t('ce')) er.ce = V.email(t('ce'));
+  Object.keys(er).forEach(k => { if (!er[k]) delete er[k]; });
+  state.newRec.err = er;
+  if (Object.keys(er).length) { recFail(); return; }
+  const v = {id:nextId(VENDORS, 'v'), name:t('name'), cat:d.cat, loc:t('loc'), lead:Math.round(+t('lead')), rating:null, ontime:null, terms:d.terms,
+    contact:`${t('cn')} · ${t('cp')}`, email:t('ce'), products:prods, added:iso(TODAY), by:state.userId};
+  VENDORS.push(v);
+  state.newRec = null; closeModal(); clearFails(); state.openVendor = v.id;
+  okT(`${v.name} added to vendors`, 'It now appears in the vendor list on every quotation line.');
+  go('vendors'); showRecord();
+}
+function customerSave(){
+  recRead();
+  const d = state.newRec.d, er = {};
+  const t = k => String(d[k] || '').trim();
+  er.name = V.req(t('name'), 'Company');
+  er.site = V.req(t('site'), 'Plant or site');
+  const dup = !er.name && !er.site && CUSTOMERS.find(c => normName(c.name) === normName(t('name')) && normName(c.site) === normName(t('site')));
+  if (dup) er.name = `${dup.name}, ${dup.site} is already a customer`;
+  er.addr = V.req(t('addr'), 'Billing address');
+  const g = t('gst').toUpperCase().replace(/\s+/g, '');
+  if (g && !GSTIN_RE.test(g)) er.gst = 'A GSTIN has 15 characters, like 27ABCDE1234F1Z5';
+  er.cn = V.req(t('cn'), 'Contact name');
+  er.cr = V.req(t('cr'), 'Designation');
+  er.ce = V.req(t('ce'), 'Email') || V.email(t('ce'));
+  er.cp = V.req(t('cp'), 'Mobile') || V.phone(t('cp'));
+  Object.keys(er).forEach(k => { if (!er[k]) delete er[k]; });
+  state.newRec.err = er;
+  if (Object.keys(er).length) { recFail(); return; }
+  const used = CUSTOMERS.map(c => c.color);
+  const c = {id:nextId(CUSTOMERS, 'c'), name:t('name'), site:t('site'), industry:d.industry, terms:d.terms, since:TODAY.getFullYear(),
+    color:CUST_COLORS.find(x => !used.includes(x)) || CUST_COLORS[CUSTOMERS.length % CUST_COLORS.length],
+    contacts:[{n:t('cn'), r:t('cr'), p:t('cp'), e:t('ce')}], addr:t('addr'), gst:g, dom:(t('ce').split('@')[1] || ''), added:iso(TODAY), by:state.userId};
+  CUSTOMERS.push(c);
+  state.newRec = null; closeModal(); clearFails(); state.openCust = c.id;
+  okT(`${c.name} added to customers`, 'Pick it in New quotation from now on.');
+  go('customers'); showRecord();
+}
+
+/* Order confirmed needs the customer's purchase order; delivery and closure keep the order record in step. */
+function poOpen(q, d, er){
+  const cal = quoteCalc(q);
+  state.po = {qid:q.id, d:d || {no:'', date:iso(TODAY), value:String(Math.round(cal.sell)), items:q.title}, err:er || {}};
+  const p = state.po, E = k => p.err[k] ? `<span class="err">${esc(p.err[k])}</span>` : '', bad = k => p.err[k] ? 'bad' : '';
+  const I = (k, label, attrs) => `<div class="field ${bad(k)}"><label for="po-${k}">${label}</label><input class="pin" id="po-${k}" data-po="${k}" value="${esc(p.d[k])}" autocomplete="off" ${attrs || ''}>${E(k)}</div>`;
+  openModal(`<h3>Record the purchase order</h3>
+    <p class="lead" style="margin:0 0 8px">${esc(cust(q.cust).name)} · ${esc(q.title)}</p>
+    <div class="g2">${I('no', 'PO number', 'placeholder="As printed on the PO"')}${I('date', 'PO date', 'type="date"')}</div>
+    <div class="g2">${I('value', 'Order value before GST', 'inputmode="numeric"')}${I('items', 'Items, as the order calls them')}</div>
+    <div class="hint">Quoted at <b class="num">${inr(cal.sell)}</b> before GST.</div>
+    <div class="btnrow" style="margin-bottom:0"><button class="btn primary" data-act="poSave">${ico('check')} Confirm order</button><button class="btn" data-act="closeModal">Cancel</button></div>`);
+  setTimeout(() => { const f = document.querySelector('#modal [data-po="' + (Object.keys(p.err)[0] || 'no') + '"]'); if (f && f.focus) f.focus(); }, 30);
+}
+function poSave(){
+  const p = state.po; if (!p) return;
+  const q = QUOTES.find(x => x.id === p.qid); if (!q) return;
+  document.querySelectorAll('#modal [data-po]').forEach(el => { p.d[el.dataset.po] = el.value; });
+  const no = String(p.d.no || '').trim(), er = {};
+  er.no = V.req(no, 'PO number');
+  if (!er.no && ORDERS.some(o => normName(o.id) === normName(no))) er.no = 'This PO number is already recorded';
+  er.date = V.req(p.d.date, 'PO date');
+  er.value = V.num(String(p.d.value).replace(/[,\s₹]/g, ''), 'Order value', 1);
+  Object.keys(er).forEach(k => { if (!er[k]) delete er[k]; });
+  if (Object.keys(er).length) { poOpen(q, p.d, er); fail('Check the purchase order details'); return; }
+  const value = Math.round(+String(p.d.value).replace(/[,\s₹]/g, '')), sell = Math.round(quoteCalc(q).sell);
+  ORDERS.push({id:no, cust:q.cust, q:q.id, date:p.d.date, value, items:String(p.d.items || '').trim() || q.title, status:'open'});
+  q.po = no;
+  log(q, `Purchase order ${no} received for ${inr(value)}` + (value !== sell ? `, quoted ${inr(sell)}` : ''));
+  state.po = null; closeModal(); clearFails();
+  advanceTo(q, q.stage + 1, `Order ${no} is now in ${cust(q.cust).name}'s order history.`);
+}
+function syncOrder(q){
+  const sid = S().stages[q.stage].id, o = ORDERS.find(x => x.q === q.id);
+  if (!o) return '';
+  if (sid === 'delivery' && o.status === 'open') { o.status = 'dispatched'; return 'The order shows as dispatched.'; }
+  if (sid === 'closed') {
+    o.status = 'delivered'; o.del = o.del || iso(TODAY);
+    if (['system', 'project'].includes(q.ptype) && !o.warranty) { o.warranty = 12; o.sys = true; return 'Delivered. Its 12 month warranty is now tracked for AMC.'; }
+    return 'The order shows as delivered.';
+  }
+  return '';
+}
+function advanceTo(q, next, note){
+  q.history.push({stage:next, at:iso(TODAY)}); q.stage = next;
+  if (next === S().stages.length - 1) q.outcome = 'won';
+  log(q, `Moved to ${S().stages[next].name}`);
+  const sync = syncOrder(q);
+  okT(`${q.id} moved to ${S().stages[next].name}`, note || sync);
+  state.folderTab = 'journey'; render();
+}
+
+window.VTCRM = {state, QUOTES, CUSTOMERS, VENDORS, ORDERS, render, visibleQuotes, quoteCalc, qref, amcAll, orderStats};
 (function init(){ const h = location.hash.slice(1); if (TABS.some(t => t[0] === h)) state.tab = h;
   if (location.search.indexOf('signedin') > -1) state.auth.signedIn = true;
   render(); })();
